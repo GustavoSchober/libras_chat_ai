@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Material de origem — de terceiros, pesado, e já destilado em KNOWLEDGE/
+# ─────────────────────────────────────────────────────────────────────────────
+# PDFs e docs do VLibras (LAViD/UFPB). Copyright de terceiros: não é nosso para
+# redistribuir, e todo o conteúdo útil virou KNOWLEDGE/*.md.
+# Onde achar de novo: KNOWLEDGE/FONTES.md
+how_to_act/
+
+# Rig 3D padrão do WikiLibras (2,3 MB, Blender 2.76). Não é usado em runtime;
+# está documentado em KNOWLEDGE/07-wikilibras-e-rig-3d.md.
+3dchar/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Segredos — a chave do LLM entra aqui quando a camada de IA existir
+# ─────────────────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+secrets/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dependências e builds
+# ─────────────────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mídia pesada baixada sob demanda
+# ─────────────────────────────────────────────────────────────────────────────
+# Vídeos do V-LIBRASIL (~10,8 GB no Hugging Face) e espelho local do player
+# Unity (~20 MB). Ver KNOWLEDGE/06 e KNOWLEDGE/03.
+*.mp4
+*.unityweb
+videos/
+player-mirror/
+dados/cache/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sistema e editores
+# ─────────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.idea/
+.vscode/
+!.vscode/extensions.json

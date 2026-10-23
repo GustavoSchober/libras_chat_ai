@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LIBRAS AI CHAT — POC</title>
+<style>
+  :root { --bg:#0f1115; --fg:#e6e8ec; --mut:#8b93a1; --ok:#3ddc84; --warn:#ffb020; --acc:#4c8dff; }
+  * { box-sizing:border-box }
+  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--fg);
+         display:grid; grid-template-columns:420px 1fr; height:100vh }
+  @media (max-width:860px){ body{grid-template-columns:1fr; height:auto} }
+  #palco { background:#fff; border-right:1px solid #222 }
+  #palco iframe { width:100%; height:100%; min-height:420px; border:0; display:block }
+  main { padding:20px; overflow:auto }
+  h1 { font-size:17px; margin:0 0 4px }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:16px }
+  textarea { width:100%; min-height:72px; background:#161922; color:var(--fg);
+             border:1px solid #2a2f3a; border-radius:8px; padding:10px; font:inherit; resize:vertical }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px;
+           padding:8px 14px; font:inherit; cursor:pointer }
+  button.sec { background:#262b36; color:var(--fg) }
+  button:disabled { opacity:.4; cursor:default }
+  .glosa { display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 }
+  .tok { padding:5px 10px; border-radius:6px; background:#1b1f2a; border:1px solid #2a2f3a; font-size:13px }
+  .tok.ok { border-color:#24593c }
+  .tok.warn { border-color:#6b4a0d; color:var(--warn) }
+  .tok.now { background:var(--acc); border-color:var(--acc); color:#fff }
+  .legenda { color:var(--mut); font-size:12px }
+  pre#log { background:#0a0c10; color:#5d6b7a; font:11px/1.45 ui-monospace,monospace;
+            padding:10px; border-radius:8px; height:150px; overflow:auto; white-space:pre-wrap; margin-top:16px }
+</style>
+</head>
+<body>
+
+<div id="palco">
+  <iframe id="player" title="Avatar VLibras"
+          src="https://vlibras.gov.br/app/unity/index.html"
+          sandbox="allow-scripts allow-same-origin"></iframe>
+</div>
+
+<main>
+  <h1>LIBRAS AI CHAT — prova de conceito</h1>
+  <div class="sub">Digite uma frase. O avatar sinaliza. Tokens em
+    <span style="color:var(--warn)">amarelo</span> não existem no acervo e serão soletrados.</div>
+
+  <textarea id="txt">o rato roeu a roupa do rei de roma</textarea>
+
+  <div class="row">
+    <button id="bSinalizar" disabled>Sinalizar</button>
+    <button class="sec" id="bRepetir">Repetir</button>
+    <button class="sec" id="bPausar">Pausar</button>
+    <button class="sec" id="bParar">Parar</button>
+    <button class="sec" id="bLento">0,6×</button>
+    <button class="sec" id="bNormal">1×</button>
+  </div>
+
+  <div id="glosa" class="glosa"></div>
+  <div id="legenda" class="legenda"></div>
+
+  <pre id="log"></pre>
+</main>
+
+<script>
+// ─── configuração ────────────────────────────────────────────────────────────
+const BASE_BUNDLES = 'https://dicionario2.vlibras.gov.br/static/BUNDLES/2018.3.1/WEBGL/BR/';
+const ENDPOINTS = [
+  'https://traducao2.vlibras.gov.br/translate',
+  'https://traducao2-dth.vlibras.gov.br/translate',
+];
+
+const fr  = document.getElementById('player');
+const log = (...a) => { const el = document.getElementById('log');
+  el.textContent += a.join(' ') + '\n'; el.scrollTop = el.scrollHeight; };
+
+// ─── ponte com o player Unity ────────────────────────────────────────────────
+const send = (object, method, params) =>
+  fr.contentWindow.postMessage({ type:'unity', object, method, params }, '*');
+
+let pronto = false, tokens = [];
+
+window.addEventListener('message', e => {
+  const d = e.data;
+  if (!d || d.type !== 'unity_event') return;
+
+  if (d.event === 'on_load_player') {
+    pronto = true;
+    // OBRIGATÓRIO: sem isto o player não sabe de onde baixar os sinais.
+    send('PlayerManager', 'setBaseUrl', BASE_BUNDLES);
+    document.getElementById('bSinalizar').disabled = false;
+    log('player pronto');
+  }
+
+  if (d.event === 'counter_gloss') {
+    const [n] = d.data;                       // sinal n de total
+    document.querySelectorAll('.tok').forEach((el, i) =>
+      el.classList.toggle('now', i === n - 1));
+  }
+
+  if (d.event !== 'update_progress' && d.event !== 'counter_gloss')
+    log(d.event, JSON.stringify(d.data ?? ''));
+});
+
+// ─── tradução com fallback (a API de produção cai de vez em quando) ──────────
+async function traduzir(texto) {
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    for (const ep of ENDPOINTS) {
+      try {
+        const r = await fetch(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: texto }),
+        });
+        if (r.ok) return (await r.text()).trim();   // text/plain, não JSON
+      } catch (_) { /* tenta o próximo */ }
+    }
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  log('tradução falhou — caindo para datilologia');
+  return texto.toUpperCase();
+}
+
+// ─── validação contra o acervo ───────────────────────────────────────────────
+let BUNDLES = null;
+fetch('../dados/bundles.json')
+  .then(r => r.json())
+  .then(b => { BUNDLES = new Set(b); log('acervo carregado:', b.length, 'glosas'); })
+  .catch(() => log('acervo não carregado — validação desligada'));
+
+function validar(glosa) {
+  return glosa.split(/\s+/).filter(Boolean).map(tok => {
+    if (!BUNDLES) return { tok, ok:true };
+    if (BUNDLES.has(tok)) return { tok, ok:true };
+
+    // 1S_IR_2S -> IR  (direcional que o tradutor inventou)
+    const dir = tok.match(/^[123][SP]_(.+?)_[123][SP]$/);
+    if (dir && BUNDLES.has(dir[1]))
+      return { tok: dir[1], ok:true, nota:`${tok} não existe; usando ${dir[1]}` };
+
+    // COMPRAR&DINHEIRO -> COMPRAR
+    const base = tok.split('&')[0];
+    if (BUNDLES.has(base))
+      return { tok: base, ok:true, nota:`${tok} não existe; usando ${base}` };
+
+    return { tok, ok:false, nota:`${tok} será soletrado` };
+  });
+}
+
+// ─── heurísticas que pegam erro SEM precisar de IA ───────────────────────
+const NEGACOES = /\b(não|nao|nunca|jamais|nenhum|nenhuma|nada|ninguém|ninguem)\b/i;
+
+function auditar(texto, itens) {
+  const avisos = [];
+  const toks = itens.map(i => i.tok);
+
+  // 1) negação que sumiu  ("eu não gosto" -> GOSTAR)
+  if (NEGACOES.test(texto) && !toks.some(t => /^(NÃO|NUNCA|NADA|NENHUM)/.test(t)))
+    avisos.push('⚠ a frase tem negação, mas a glosa não — o sinal pode dizer o contrário');
+
+  // 2) colapso: a glosa encolheu demais  ("o gato roeu..." -> GATO ROMA ROMA)
+  const palavras = texto.split(/\s+/).filter(p => p.length > 2).length;
+  if (palavras >= 5 && toks.length < palavras / 2)
+    avisos.push('⚠ a tradução encolheu muito — pode ter perdido palavras');
+
+  // 3) token repetido em sequência: sintoma clássico do colapso
+  for (let i = 1; i < toks.length; i++)
+    if (toks[i] === toks[i - 1]) {
+      avisos.push(`⚠ "${toks[i]}" apareceu repetido — sinal de tradução quebrada`);
+      break;
+    }
+
+  // 4) entrada sem acento: causa comum de sinal faltando
+  if (itens.some(i => !i.ok) && !/[áàâãéêíóôõúç]/i.test(texto))
+    avisos.push('⚠ o texto não tem acentos — acentuar costuma resolver');
+
+  return avisos;
+}
+
+function pintar(itens) {
+  const el = document.getElementById('glosa');
+  el.innerHTML = '';
+  itens.forEach(it => {
+    const d = document.createElement('span');
+    d.className = 'tok ' + (it.ok ? 'ok' : 'warn');
+    d.textContent = it.tok;
+    if (it.nota) d.title = it.nota;
+    el.appendChild(d);
+  });
+  const notas = itens.filter(i => i.nota).map(i => i.nota);
+  const texto = document.getElementById('txt').value.trim();
+  const avisos = auditar(texto, itens);
+  const el2 = document.getElementById('legenda');
+  el2.innerHTML = '';
+  avisos.forEach(a => {
+    const d = document.createElement('div');
+    d.style.color = 'var(--warn)';
+    d.textContent = a;
+    el2.appendChild(d);
+  });
+  if (notas.length) {
+    const d = document.createElement('div');
+    d.textContent = notas.join(' · ');
+    el2.appendChild(d);
+  }
+}
+
+// ─── ações ───────────────────────────────────────────────────────────────────
+async function sinalizar() {
+  const texto = document.getElementById('txt').value.trim();
+  if (!texto || !pronto) return;
+  const glosa = await traduzir(texto);
+  log('glosa:', glosa);
+  const itens = validar(glosa);
+  pintar(itens);
+  tokens = itens.map(i => i.tok);
+  // um playNow durante uma reprodução em curso é ignorado: pare antes.
+  send('PlayerManager', 'stopAll', '');
+  setTimeout(() => send('PlayerManager', 'playNow', tokens.join(' ')), 150);
+}
+
+document.getElementById('bSinalizar').onclick = sinalizar;
+document.getElementById('bRepetir').onclick = () => {
+  if (!tokens.length) return;
+  send('PlayerManager','stopAll','');
+  setTimeout(() => send('PlayerManager','playNow',tokens.join(' ')), 150);
+};
+document.getElementById('bPausar').onclick  = () => send('PlayerManager','setPauseState','1');
+document.getElementById('bParar').onclick   = () => send('PlayerManager','stopAll','');
+document.getElementById('bLento').onclick   = () => send('PlayerManager','setSlider','0.6');
+document.getElementById('bNormal').onclick  = () => send('PlayerManager','setSlider','1');
+
+document.getElementById('txt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sinalizar();
+});
+
+log('carregando player (~20 MB na primeira vez)…');
+</script>
+</body>
+</html>
