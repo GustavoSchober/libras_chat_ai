@@ -44,6 +44,14 @@ localhost, em Vite, em qualquer lugar.** Sem proxy, sem backend.
 
 Carregou em **~5 s** numa conexão comum. É um custo de primeira visita; depois o browser cacheia.
 
+**O cache já existe, não precisa implementar** (medido em 2026-11-12). Os três `.unityweb` são
+um 302 do `vlibras.gov.br` para o jsDelivr (`@v7.12.2`) com `Cache-Control: max-age=31536000,
+immutable`. Na 2ª visita o `transferSize` de todos os arquivos do iframe é **0** (4–14 ms cada).
+O que ainda demora na volta é CPU: descomprimir o `.data`, compilar o wasm e subir o Unity.
+Chrome headless com GPU em software: 1ª visita 12,6 s até o `on_load_player`, 2ª e 3ª ~7,0 s.
+Service Worker ou IndexedDB nosso não ajudariam (o iframe é de outra origem e já sai do cache);
+o único ganho real seria reduzir a CPU, o que exige mexer no build do governo.
+
 ## O contrato de comunicação
 
 A página do player é um iframe isolado. A conversa é **`postMessage` nos dois sentidos**.
@@ -76,13 +84,18 @@ window.addEventListener('message', e => {
 | `on_load_player` | — | **player pronto. Só comande depois disto.** |
 | `update_progress` | `0..1` | download/inicialização |
 | `on_playing_state_change` | `[isPlaying, isPaused, isPlayingInterval, isLoading, isRepeatable]` — strings `"True"`/`"False"` | mudança de estado |
-| `counter_gloss` | `[n, total]` | **avançou para o sinal n de total** ⭐ |
+| `counter_gloss` | `[n, total]` | **o sinal n de total TERMINOU** ⭐ (corrigido em 2026-11-09, ver abaixo) |
 | `get_avatar` | `"icaro"` | avatar atual |
 | `finish_welcome` | bool | fim da animação de boas-vindas |
 | `on_error` | `"unsupported"` | sem WebGL |
 
 ⭐ `counter_gloss` é o evento que torna o projeto *didático*: ele diz **qual palavra está
 sendo sinalizada agora**, permitindo destacar o token correspondente no texto.
+
+> ⚠️ **Medido em 2026-11-09: o evento chega no FIM do sinal, não no começo.** Com `playNow
+> 'RATO'`, o `[1,1]` chega no mesmo milissegundo que `on_playing_state_change` com
+> `isPlaying=False`. Logo, ao receber `[n, total]`, o sinal em execução é o de índice `n`
+> (0-based) — o POC destacava um sinal atrasado até esta correção.
 
 ## Os GameObjects e todos os métodos
 
@@ -104,7 +117,7 @@ const OBJ = {
 | `setPauseState` | `'1'` pausa / `'0'` continua | pausa/retoma |
 | `stopAll` | `''` | para tudo |
 | `repeat` | — | repete |
-| `setSlider` | `'0.5'`..`'2'` | velocidade |
+| `setSlider` | **número** (`1.5`, não `'1.5'`) — aceita ao menos 0,5 a 4 | velocidade ⚠️ ver abaixo |
 | `Change` | `'icaro'` \| `'hosana'` \| `'guga'` | troca de avatar |
 | `setBaseUrl` | URL do dicionário + região | **de onde baixar os sinais** |
 | `setSubtitlesState` | `'1'` / `'0'` | legenda liga/desliga |
@@ -189,6 +202,24 @@ EVT counter_gloss [1,5] [2,5] [3,5] [4,5] [5,5]
 ```
 O avatar Ícaro apareceu e sinalizou as 5 glosas, com legenda. ✅
 
+## ⚠️ `setSlider` com string é ignorado em silêncio — e o avatar é lento por padrão
+
+Medido em 2026-11-09 com o POC, tempo do `playNow` até o fim de `RATO ROER ROUPA REI ROMA`
+(sinais já em cache; o tradutor e o download **não** entram nesta conta):
+
+| `setSlider` | 5 sinais | |
+|---|---|---|
+| `'2'`, `'1.5'`, `'0.6'` (**string**) | igual ao padrão, ao milissegundo | **ignorado** |
+| `1` (padrão) | **16,4 s** | ~2 a 4 s por sinal + 1 a 2 s de arranque |
+| `1.5` | 11,5 s | padrão do POC desde 2026-11-09 |
+| `2` | ~8 s | |
+| `3` | 6,6 s | |
+| `4` | 5,3 s | legibilidade não avaliada |
+
+Os botões antigos do POC mandavam string e **nunca funcionaram**. A lentidão percebida
+("o avatar é lerdo") não vinha da rede: a API de tradução respondeu em 25–170 ms e cada
+bundle baixa em ~60 ms. Vinha da velocidade da animação.
+
 ## ⚠️ `playNow` durante uma reprodução é ignorado
 
 Descoberto testando ✅: se você mandar `playNow` enquanto o avatar ainda está sinalizando a
@@ -214,6 +245,20 @@ O pequeno atraso dá tempo de o Unity processar o `stopAll` antes do `playNow`.
    que viabiliza o projeto.
 3. **Pontuação conta como sinal.** `'OI TUDO_BEM VOCÊ [INTERROGAÇÃO]'` reportou `[4,4]`.
    O `[INTERROGAÇÃO]` é um sinal de verdade (expressão facial interrogativa), não um caractere.
+
+## O fundo já é transparente, e o corte vem da largura ✅ (medido em 2026-11-11)
+
+- O `index.html` do player declara `#gameContainer { background-color: transparent !important }`
+  e o canvas do Unity renderiza com alfa. Sobre um fundo colorido, só o boneco aparece. A
+  "caixa branca" do POC era o `#palco { background:#fff }` nosso. Não precisa editar o modelo.
+- **Exceção:** durante o carregamento o canvas fica BRANCO, até ~1 s depois do
+  `on_load_player`. O app esconde o iframe (`opacity:0`) até lá.
+- O avatar tem **escala vertical fixa**: o tamanho do boneco segue a ALTURA do iframe, e a
+  largura só acrescenta margem dos lados. Em repouso ele ocupa ~46% da altura em largura;
+  sinalizando, os braços passam disso. Num iframe estreito (o POC tinha 420 px de largura
+  e a tela inteira de altura) os braços saem do quadro. Regra do app: largura ≥ 1,1× altura
+  (`height: min(100cqh, 90cqw)` em `web/src/styles.css`).
+- As pernas terminam na borda de baixo do iframe; um `mask-image` em gradiente esconde o corte.
 
 ## Hospedar o player localmente (opcional)
 

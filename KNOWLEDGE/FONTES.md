@@ -72,6 +72,11 @@ de ossos, para não precisar reabrir o arquivo.
 - https://huggingface.co/docs/hub/datasets-viewer-embed — embutir o viewer
 - https://huggingface.co/docs/hub/index — docs do Hub
 
+### Jev (TypeSafe) e corpus da auditoria
+
+- https://docs.typesafe.ai — documentação do Jev (índice em https://docs.typesafe.ai/llms.txt); resumo em [13](13-camada-de-ia-jev.md)
+- https://downloads.tatoeba.org/exports/per_language/por/ — frases em português do Tatoeba (CC-BY 2.0 FR), usadas na auditoria ([14](14-auditoria-de-glosa.md))
+
 ---
 
 ## Licenças — confirmar antes de qualquer uso comercial

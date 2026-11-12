@@ -10,14 +10,24 @@ how_to_act/
 # está documentado em KNOWLEDGE/07-wikilibras-e-rig-3d.md.
 3dchar/
 
+# Cópia da documentação do Jev (TypeSafe). De terceiros; o útil está em KNOWLEDGE/13.
+# Original em https://docs.typesafe.ai (ver KNOWLEDGE/FONTES.md).
+doc_ai/
+
+# Nota de passagem entre sessões de trabalho: tem notas pessoais e de custo, não é doc do projeto.
+PROXIMA_SESSAO.md
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Segredos — a chave do LLM entra aqui quando a camada de IA existir
 # ─────────────────────────────────────────────────────────────────────────────
 .env
+.env.local
 .env.*
 !.env.example
 *.key
 secrets/
+# Rascunho onde a chave foi colada antes de ir para o .env.local — apagar depois
+doc_ai/importante.md
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependências e builds
@@ -46,6 +56,10 @@ __pycache__/
 videos/
 player-mirror/
 dados/cache/
+
+# Saída de execuções (regressão e auditoria): regenerável, ~16 MB, e a auditoria
+# carrega frases do Tatoeba (CC-BY). O resumo do que foi medido está em KNOWLEDGE/14.
+ia/resultados/
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sistema e editores

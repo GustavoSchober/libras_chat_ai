@@ -138,36 +138,70 @@ com confiança — e só a segunda categoria exige semântica.
 | ✅ **Acervo em mãos** | 24.213 sinais do avatar + 1.364 sinais em vídeo humano |
 | ✅ **Rede de segurança** | validação de glosa + heurísticas que detectam tradução quebrada |
 | ✅ **Riscos medidos** | documentados com mitigação definida, não como suposição |
-| 🔜 **Camada de IA** | arquitetura e contrato definidos; aguardando a API de um modelo |
+| ✅ **Modelo escolhido** | **Jev (TypeSafe)** — estudado, dimensionado e com a camada 2 redesenhada |
+| 🔜 **Camada de IA** | arquitetura e contrato definidos; aguardando a contratação da API |
 | 🔜 **Camada pedagógica** | onde o produto vira produto |
 
 ### Próximos passos
 
 1. **UI didática** — glosa token a token, destaque sincronizado, controles de ritmo
 2. **Vídeo humano lado a lado** — mapear glosa → V-LIBRASIL
-3. **Camada de IA** — backend fino; teste de aceitação já escrito:
+3. **Gerador de candidatos e catálogo de notas** — lematizador + trie sobre as 24.213 glosas,
+   e as 14 regras de gramática já verificadas viram as primeiras notas ao aluno.
+   **Não depende de API nenhuma**, e é o teto de qualidade de tudo que vem depois.
+4. **Camada de IA** — backend fino; teste de aceitação já escrito:
    `"O rato roeu a roupa do rei de Roma."` precisa sair `RATO ROER ROUPA REI ROMA [PONTO]`
-4. **Comparação entre versões** — "mudaram 2 sinais, pratique só esses"
-5. **Progresso do aluno** — repetição espaçada
+5. **Comparação entre versões** — "mudaram 2 sinais, pratique só esses"
+6. **Progresso do aluno** — repetição espaçada
 
-Nada antes do passo 3 depende de IA, e já é um produto útil.
+Nada antes do passo 4 depende de IA, e já é um produto útil.
+
+### A camada de IA, em uma caixa
+
+O modelo escolhido é o **Jev**, da TypeSafe — e a escolha mudou o desenho, porque **o Jev não
+gera texto**. Ele só devolve decisões típadas: uma opção de uma lista que você forneceu, um
+nível de uma escala, ou a probabilidade de uma afirmação ser verdadeira. Então a glosa deixa
+de ser *gerada* e passa a ser **montada pelo nosso código** a partir dessas decisões.
+
+Isso tem três consequências que melhoram o produto:
+
+- **Alucinação de glosa deixa de ser possível** — não improvável, impossível: a resposta é
+  sempre uma das opções que mandamos, e nós só mandamos sinais que existem no acervo.
+- **Toda resposta vem com confiança calibrada**, pronta para um `if`. Um modelo de texto
+  devolve prosa confiante; este devolve um número. Num app de ensino, é a diferença entre
+  avisar e mentir — que é a premissa com que este projeto nasceu.
+- **As explicações vêm de um catálogo escrito por humano**, que o modelo apenas seleciona.
+  Nenhum modelo inventa uma regra gramatical de Libras na frente de um aluno.
+
+E custa **US$ 0,000043 por frase**, com resposta em ~114 ms — cerca de **US$ 0,78 por aluno
+por ano**, a 50 frases por dia. O estudo completo, com os defeitos conhecidos do modelo e as
+mitigações, está em [`KNOWLEDGE/13-camada-de-ia-jev.md`](KNOWLEDGE/13-camada-de-ia-jev.md).
 
 ## Rodando
 
 ```bash
-python3 -m http.server 8080
-# abra http://localhost:8080/poc/index.html
+npm install      # só na primeira vez
+npm run dev      # http://localhost:5173 — sobe o Vite E o ia/servidor.py (cria o .venv se faltar)
+npm start        # build + só o ia/servidor.py servindo o app, como vai para produção
+                 # HOST=0.0.0.0 PORT=80 npm start  para expor
 ```
 
-A primeira carga baixa ~20 MB do avatar. Depois é instantâneo.
-Não há build, não há dependências, não há backend.
+Precisa de `TYPESAFE_API_KEY` no `.env.local`. Sem a IA, a página mostra "IA desligada" em
+vermelho e cai para o tradutor do governo, que erra (`RATO ROEDOR`, negação perdida).
+
+A primeira carga baixa ~20 MB do avatar; depois vem do cache do navegador, e só a
+inicialização do Unity (alguns segundos de CPU) se repete.
+O backend é um único arquivo (`ia/servidor.py`, só biblioteca padrão + `requests` +
+`simplemma`) e existe só para a chave do Jev não ir para o navegador.
 
 ## Estrutura
 
 ```
 README.md       este arquivo
 KNOWLEDGE/      base de conhecimento técnica — comece por 00-INDEX.md
-poc/            prova de conceito funcional (um HTML, sem build)
+web/            o app (Vite + React + TS); web/src/styles.css tem os tokens das direções visuais
+poc/            prova de conceito antiga (um HTML, sem build)
+ia/             motor de glosa com o Jev: servidor, gerador de candidatos, suíte de regressão
 dados/          snapshots versionados: 24.213 sinais do avatar + índice do corpus
                 └ atualizar.sh regenera tudo a partir das fontes
 ```

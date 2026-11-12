@@ -27,6 +27,13 @@
   .tok.ok { border-color:#24593c }
   .tok.warn { border-color:#6b4a0d; color:var(--warn) }
   .tok.now { background:var(--acc); border-color:var(--acc); color:#fff }
+  .tok.incerto { border-style:dashed; border-color:var(--warn) }
+  button.sec.on { outline:2px solid var(--acc) }
+  .motor { font-size:12px; color:var(--mut); margin-top:6px }
+  .alerta { background:#3a1114; border:1px solid #ff4d5e; color:#ffd7db; padding:10px 12px;
+            border-radius:8px; margin:0 0 14px; font-size:14px }
+  .alerta code { background:#00000055; padding:1px 5px; border-radius:4px }
+  .iaok { color:var(--ok); font-size:12px; margin:0 0 10px }
   .legenda { color:var(--mut); font-size:12px }
   pre#log { background:#0a0c10; color:#5d6b7a; font:11px/1.45 ui-monospace,monospace;
             padding:10px; border-radius:8px; height:150px; overflow:auto; white-space:pre-wrap; margin-top:16px }
@@ -41,9 +48,13 @@
 </div>
 
 <main>
+  <div id="alerta" class="alerta" hidden></div>
+  <div id="iaok" class="iaok" hidden>● IA ligada (Jev)</div>
   <h1>LIBRAS AI CHAT — prova de conceito</h1>
   <div class="sub">Digite uma frase. O avatar sinaliza. Tokens em
-    <span style="color:var(--warn)">amarelo</span> não existem no acervo e serão soletrados.</div>
+    <span style="color:var(--warn)">amarelo</span> não existem no acervo e serão soletrados;
+    com <span style="border:1px dashed var(--warn);padding:0 4px;border-radius:4px">borda tracejada</span>,
+    a IA não teve certeza do sinal.</div>
 
   <textarea id="txt">o rato roeu a roupa do rei de roma</textarea>
 
@@ -52,12 +63,14 @@
     <button class="sec" id="bRepetir">Repetir</button>
     <button class="sec" id="bPausar">Pausar</button>
     <button class="sec" id="bParar">Parar</button>
-    <button class="sec" id="bLento">0,6×</button>
-    <button class="sec" id="bNormal">1×</button>
+    <button class="sec vel" data-v="1">1×</button>
+    <button class="sec vel" data-v="1.5">1,5×</button>
+    <button class="sec vel" data-v="2">2×</button>
   </div>
 
   <div id="glosa" class="glosa"></div>
   <div id="legenda" class="legenda"></div>
+  <div id="motor" class="motor"></div>
 
   <pre id="log"></pre>
 </main>
@@ -78,7 +91,7 @@ const log = (...a) => { const el = document.getElementById('log');
 const send = (object, method, params) =>
   fr.contentWindow.postMessage({ type:'unity', object, method, params }, '*');
 
-let pronto = false, tokens = [];
+let pronto = false, tokens = [], degradado = false, atual = 0;
 
 window.addEventListener('message', e => {
   const d = e.data;
@@ -88,19 +101,67 @@ window.addEventListener('message', e => {
     pronto = true;
     // OBRIGATÓRIO: sem isto o player não sabe de onde baixar os sinais.
     send('PlayerManager', 'setBaseUrl', BASE_BUNDLES);
+    aplicarVelocidade(velocidade);
     document.getElementById('bSinalizar').disabled = false;
     log('player pronto');
   }
 
   if (d.event === 'counter_gloss') {
-    const [n] = d.data;                       // sinal n de total
-    document.querySelectorAll('.tok').forEach((el, i) =>
-      el.classList.toggle('now', i === n - 1));
+    // [n, total] chega quando o sinal n TERMINA (medido: com 1 sinal, [1,1] chega junto
+    // com o fim da reprodução). O que está sendo sinalizado agora é o índice n (0-based).
+    const [n, total] = d.data;
+    if (total) { atual = n; destacar(n < total ? n : -1); }
   }
+  // logo depois do playNow o player emite isPlaying=False antes do True: não limpe ali.
+  if (d.event === 'on_playing_state_change' && d.data?.[0] === 'True') destacar(atual);
 
   if (d.event !== 'update_progress' && d.event !== 'counter_gloss')
     log(d.event, JSON.stringify(d.data ?? ''));
 });
+
+// ─── a IA está ligada? ───────────────────────────────────────────────────────
+// Sem o servidor do projeto a página cai para o tradutor do governo, que erra feio
+// (RATO ROEDOR..., negação perdida). Isso NÃO pode acontecer em silêncio.
+const URL_CERTA = 'http://127.0.0.1:8765/poc/';  // suba com: npm run dev
+const COMO_LIGAR = `Rode <code>npm run dev</code> na pasta do projeto e use <a style="color:#fff" href="${URL_CERTA}">${URL_CERTA}</a>.`;
+function alertar(html) {
+  const el = document.getElementById('alerta');
+  el.innerHTML = html || ''; el.hidden = !html;
+  document.getElementById('iaok').hidden = !!html;
+}
+async function checarIA() {
+  if (location.protocol === 'file:')
+    return alertar('⛔ <b>IA DESLIGADA</b> — a página foi aberta como arquivo. ' + COMO_LIGAR);
+  try {
+    const r = await fetch('/api/saude', { cache: 'no-store' });
+    const j = await r.json();
+    alertar(j.ok ? '' : '⛔ <b>IA DESLIGADA</b> — ' + j.erro + '. Confira a chave no <code>.env.local</code>.');
+  } catch (_) {
+    alertar('⛔ <b>IA DESLIGADA</b> — esta página não está sendo servida pelo servidor do projeto. ' +
+            COMO_LIGAR + ' Enquanto isso, as frases vão para o tradutor do governo, que erra ' +
+            '(ex.: <code>RATO ROEDOR</code>, negação perdida).');
+  }
+}
+checarIA();
+
+// ─── motor principal: o Jev escolhe os sinais, o código monta (ia/servidor.py) ──
+// Os SINAIS continuam vindo do acervo do governo (dicionario2.vlibras.gov.br); o que muda
+// é quem decide QUAIS sinais. Se o servidor não responder, cai para o tradutor do governo.
+async function glosarComJev(texto) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const r = await fetch('/api/glosa', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto }), signal: ctl.signal,
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
+    return await r.json();
+  } catch (e) {
+    log('motor Jev indisponível (' + e.message + ') — usando o tradutor do governo');
+    return null;
+  } finally { clearTimeout(t); }
+}
 
 // ─── tradução com fallback (a API de produção cai de vez em quando) ──────────
 async function traduzir(texto) {
@@ -117,9 +178,17 @@ async function traduzir(texto) {
     }
     await new Promise(r => setTimeout(r, 1200));
   }
-  log('tradução falhou — caindo para datilologia');
-  return texto.toUpperCase();
+  log('tradução falhou — modo degradado');
+  degradado = true;
+  // NÃO devolvemos o texto cru em maiúsculas: palavras como GOSTO casam por acidente
+  // com um sinal de OUTRO sentido (o substantivo "sabor") e o avatar erra com confiança.
+  // Tiramos ao menos as palavras funcionais, que nunca viram sinal em Libras.
+  return texto.toUpperCase().split(/\s+/).filter(p => p && !VAZIAS.has(p)).join(' ');
 }
+
+// existem em português, mas não são sinalizadas em Libras
+const VAZIAS = new Set(['DE','DA','DO','DAS','DOS','A','O','AS','OS','UM','UMA','UNS','UMAS',
+  'EM','NO','NA','NOS','NAS','AO','À','PARA','PRA','POR','COM','QUE','E','É','SE','SEU','SUA']);
 
 // ─── validação contra o acervo ───────────────────────────────────────────────
 let BUNDLES = null;
@@ -177,19 +246,35 @@ function auditar(texto, itens) {
   return avisos;
 }
 
-function pintar(itens) {
+function destacar(i) {
+  document.querySelectorAll('.tok').forEach((el, k) => el.classList.toggle('now', k === i));
+}
+
+function pintar(itens, info = {}) {
   const el = document.getElementById('glosa');
   el.innerHTML = '';
   itens.forEach(it => {
     const d = document.createElement('span');
-    d.className = 'tok ' + (it.ok ? 'ok' : 'warn');
+    d.className = 'tok ' + (it.ok ? 'ok' : 'warn') + (it.incerto ? ' incerto' : '');
     d.textContent = it.tok;
-    if (it.nota) d.title = it.nota;
+    const dica = [];
+    if (it.palavra && it.palavra !== it.tok) dica.push('“' + it.palavra + '”');
+    if (it.confianca != null) dica.push('confiança ' + it.confianca.toFixed(2));
+    if (it.alternativas) dica.push('alternativas: ' +
+      it.alternativas.map(([g, p]) => g + ' ' + p.toFixed(2)).join(', '));
+    if (it.nota) dica.push(it.nota);
+    if (dica.length) d.title = dica.join(' · ');
     el.appendChild(d);
   });
   const notas = itens.filter(i => i.nota).map(i => i.nota);
   const texto = document.getElementById('txt').value.trim();
-  const avisos = auditar(texto, itens);
+  // as heurísticas de colapso são para a saída do tradutor do governo
+  const avisos = info.motor === 'vlibras' ? auditar(texto, itens) : [];
+  if (itens.some(i => i.incerto)) avisos.push(
+    '⚠ a IA não teve certeza de algum sinal (borda tracejada) — passe o mouse para ver as alternativas');
+  if (degradado) avisos.unshift(
+    '⛔ O tradutor está fora do ar. Isto NÃO é Libras — é soletração palavra a palavra, ' +
+    'e algum sinal pode sair com outro sentido. Não use para aprender.');
   const el2 = document.getElementById('legenda');
   el2.innerHTML = '';
   avisos.forEach(a => {
@@ -198,24 +283,43 @@ function pintar(itens) {
     d.textContent = a;
     el2.appendChild(d);
   });
+  if (info.descartadas?.length) notas.push(...info.descartadas.map(d => d.nota));
   if (notas.length) {
     const d = document.createElement('div');
     d.textContent = notas.join(' · ');
     el2.appendChild(d);
   }
+  document.getElementById('motor').textContent = info.motor === 'vlibras'
+    ? 'motor: tradutor do governo (reserva)'
+    : `motor: Jev (${info.modelo}) · ${info.ms} ms` +
+      (info.emocao ? ` · expressão: ${info.emocao.emocao}` : '');
 }
 
 // ─── ações ───────────────────────────────────────────────────────────────────
 async function sinalizar() {
   const texto = document.getElementById('txt').value.trim();
   if (!texto || !pronto) return;
-  const glosa = await traduzir(texto);
-  log('glosa:', glosa);
-  const itens = validar(glosa);
-  pintar(itens);
+  degradado = false;
+  let itens, info = await glosarComJev(texto);
+  if (info) {
+    itens = info.itens;                       // já validados no servidor
+    log(`glosa (Jev, ${info.ms} ms):`, info.glosa);
+    alertar('');
+  } else {
+    alertar('⛔ <b>IA DESLIGADA — esta tradução é do tradutor do governo</b>, sem a correção ' +
+            'da IA. Ela erra (ex.: <code>RATO ROEDOR</code>, negação perdida). ' + COMO_LIGAR);
+    const glosa = await traduzir(texto);
+    log('glosa (governo):', glosa);
+    itens = validar(glosa);
+    info = { motor: 'vlibras' };
+  }
+  pintar(itens, info);
   tokens = itens.map(i => i.tok);
   // um playNow durante uma reprodução em curso é ignorado: pare antes.
   send('PlayerManager', 'stopAll', '');
+  const e = info.emocao;
+  send('EmotionBridge', e ? e.metodo : 'ApplyDefaultEmotion', e ? Number(e.intensidade) : 2);
+  atual = 0;
   setTimeout(() => send('PlayerManager', 'playNow', tokens.join(' ')), 150);
 }
 
@@ -223,12 +327,26 @@ document.getElementById('bSinalizar').onclick = sinalizar;
 document.getElementById('bRepetir').onclick = () => {
   if (!tokens.length) return;
   send('PlayerManager','stopAll','');
+  atual = 0;
   setTimeout(() => send('PlayerManager','playNow',tokens.join(' ')), 150);
 };
 document.getElementById('bPausar').onclick  = () => send('PlayerManager','setPauseState','1');
 document.getElementById('bParar').onclick   = () => send('PlayerManager','stopAll','');
-document.getElementById('bLento').onclick   = () => send('PlayerManager','setSlider','0.6');
-document.getElementById('bNormal').onclick  = () => send('PlayerManager','setSlider','1');
+// ─── velocidade ──────────────────────────────────────────────────────────────
+// ⚠ setSlider precisa de NÚMERO. Com string ('1.5') o Unity ignora em silêncio —
+// por isso os botões antigos ('0.6', '1') nunca funcionaram. Medido em 2026-11-09:
+// 5 sinais levam 16,4 s em 1×, 11,5 s em 1,5× e 8 s em 2×.
+let velocidade = 1.5;
+try { velocidade = Number(localStorage.getItem('velocidade')) || 1.5; } catch (_) {}
+function aplicarVelocidade(v) {
+  velocidade = v;
+  send('PlayerManager', 'setSlider', v);
+  try { localStorage.setItem('velocidade', String(v)); } catch (_) {}
+  document.querySelectorAll('button.vel').forEach(b =>
+    b.classList.toggle('on', Number(b.dataset.v) === v));
+}
+document.querySelectorAll('button.vel').forEach(b =>
+  b.onclick = () => aplicarVelocidade(Number(b.dataset.v)));
 
 document.getElementById('txt').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sinalizar();

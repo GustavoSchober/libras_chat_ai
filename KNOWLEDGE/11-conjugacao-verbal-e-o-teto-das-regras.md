@@ -203,3 +203,16 @@ meta:      RATO ROER ROUPA REI ROMA [PONTO]         ✅
 Se a camada de IA entregar isso, ela está fazendo o que o motor sozinho jamais faria.
 Guarde as 40 frases de verbos deste documento como suíte de regressão: a baseline é 82%,
 e agora dá para medir quanto a IA some a isso em vez de confiar na impressão.
+
+---
+
+> 📌 **Atualização 2026-10-29 — o modelo foi escolhido: Jev (TypeSafe).**
+> Ver [13](13-camada-de-ia-jev.md). Dois fatos deste documento viraram alicerce do desenho:
+>
+> 1. **A Classe B vira um `Choice`.** Medi o acervo: para `pus`, `quis`, `vi`, `pediu`,
+>    `roeu` e `gosto`, a glosa certa **está** num conjunto de 1 a 12 candidatos levantados do
+>    `bundles.json` (recall 12/12 ✅). `PÔR&COLOCAR` está entre os candidatos de "pus".
+>    Escolher ali é desambiguação lexical por contexto — a tarefa mais forte do Jev.
+> 2. **As 40 frases viram o teste de viabilidade.** Rodá-las contra o Jev custa
+>    **US$ 0,0017** e responde a única pergunta em aberto (precisão em português).
+>    É o primeiro comando a dar depois de pôr a chave no `.env`.
