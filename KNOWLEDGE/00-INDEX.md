@@ -25,6 +25,7 @@ Tudo marcado com ✅ foi **verificado executando**, não lido.
 | [12-rag-ou-indice.md](12-rag-ou-indice.md) | **Precisamos de RAG?** O acervo já é um léxico estruturado; o que resolver com índice e o que exige IA |
 | [13-camada-de-ia-jev.md](13-camada-de-ia-jev.md) | **O modelo escolhido: Jev (TypeSafe).** Por que ele não gera texto, como isso redesenha a camada 2, preço, limites, defeitos conhecidos — e o resultado: **40/40 em português** com descrição estruturada (Parte 10, 2026-11-09) |
 | [14-auditoria-de-glosa.md](14-auditoria-de-glosa.md) | **Auditoria em massa** com 20 mil frases do Tatoeba: como rodar, o que foi corrigido (12 padrões) e o **backlog aberto** (2026-11-11) |
+| [15-fase-2-camera-e-avaliacao.md](15-fase-2-camera-e-avaliacao.md) | **Fase 2: o aluno sinaliza para a câmera.** Arquitetura (visão no navegador, verificação e não reconhecimento, Jev só na orientação), o teste com DTW (teto de ~27% de erro) as decisões D1–D11, licenças e as etapas E1–E7 (documento vivo, 2026-11-12) |
 | [FONTES.md](FONTES.md) | Todos os links, o material que ficou fora do Git e as licenças |
 
 ## O resumo de uma página

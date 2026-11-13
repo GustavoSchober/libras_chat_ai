@@ -40,6 +40,8 @@ build/
 
 # Python
 .venv/
+.venv-visao/
+*.task
 venv/
 __pycache__/
 *.py[cod]
