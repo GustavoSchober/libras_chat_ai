@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { glosar, saudeIA, type Item, type Resultado } from './glosa'
 import { PLAYER_URL, usePlayer } from './player'
+
+// o MediaPipe só é baixado quando o aluno abre a aba Praticar
+const Praticar = lazy(() => import('./Praticar'))
 
 type Turno = { id: number; texto: string; r?: Resultado; soletrar?: string[] }
 
@@ -30,6 +33,7 @@ const VELOCIDADES = [0.5, 1, 1.5, 2]
 
 export default function App() {
   const p = usePlayer()
+  const [aba, setAba] = useState<'conversar' | 'praticar'>('conversar')
   const [turnos, setTurnos] = useState<Turno[]>([])
   const [ativo, setAtivo] = useState<number | null>(null)
   const [inicio, setInicio] = useState(0) // sinal isolado: o player conta do 0, a glosa não
@@ -113,6 +117,13 @@ export default function App() {
       <header className="topo">
         <span className="marca">Libras <b>AI</b> Chat</span>
         <div className="topo-dir">
+          <nav className="abas" aria-label="Seções">
+            {(['conversar', 'praticar'] as const).map(a => (
+              <button key={a} type="button" className="aba" aria-current={aba === a ? 'page' : undefined} onClick={() => setAba(a)}>
+                {a === 'conversar' ? 'Conversar' : 'Praticar'}
+              </button>
+            ))}
+          </nav>
           <span className={'status ' + (ia === null ? '' : ia.ok ? 'ok' : 'off')} role="status">
             {ia === null ? 'Verificando a IA' : ia.ok ? 'IA ligada' : 'IA desligada'}
           </span>
@@ -125,7 +136,9 @@ export default function App() {
         </div>
       </header>
 
-      <main className="principal">
+      <main className={'principal' + (aba === 'praticar' ? ' praticar' : '')}>
+        {/* o avatar é o mesmo iframe nas duas abas: trocar de aba não recarrega o Unity */}
+        {aba === 'praticar' && <Suspense><Praticar /></Suspense>}
         <section className="palco" aria-label="Avatar">
           <div className="avatar">
             <iframe ref={p.ref} src={PLAYER_URL} title="Avatar 3D do VLibras sinalizando a frase"

@@ -138,7 +138,11 @@ Detalhes que importam:
   `holistic_landmarker.task` **13,7 MB**; `hand_landmarker.task` 7,8 MB. São downloads da 1ª
   visita: servir com cache longo, como o jsDelivr faz com o avatar ([03](03-player-3d.md)).
 - **Fixar uma versão publicada há pelo menos 2 semanas** (a 1.2.3 teve metadado alterado no
-  próprio dia 12/11).
+  próprio dia 12/11). **Fixada em 13/11: `@mediapipe/tasks-vision@1.2.0`** (publicada em 27/10;
+  a 1.2.3 é de 11/11). O wasm vem do jsDelivr com a mesma versão e o modelo de
+  `holistic_landmarker/float16/1/` (versão fixa, não `latest`). O `mediapipe` Python também tem a
+  1.2.0: **a extração da E2 tem que usar `mediapipe==1.2.0`**. O spike de 12/11 usou a 1.2.3; o
+  `.venv-visao` não existe mais no disco.
 - Em Python ✅: `mediapipe` 1.2.3 instala no Python 3.12 (não no 3.14 do sistema), com
   `HolisticLandmarker` em `mediapipe.tasks.python.vision`.
 
@@ -456,6 +460,12 @@ O site do projeto tem uma página **"Condições de uso"**
 responder o que perguntamos aos autores.
 
 ### Status
+- **13/11: os autores responderam, autorizando.** Resposta recebida pelo Gustavo: *"pode mandar
+  bala fera, fica a vontade, parabens pela iniciativa"*. O e-mail pedia **(a)** manter o espelho
+  no HF com citação e **(b)** publicar landmarks derivados no site. É uma autorização **informal e
+  sem licença nomeada**: guardar o e-mail (é a prova) e **citar sempre** (dissertação + DOI), no
+  cartão do dataset no HF e onde o dado aparecer no site. Os itens 1 e 2 da recomendação abaixo
+  ficam resolvidos; 3 e 4 continuam valendo.
 - **12/11:** e-mail único aos dois autores redigido; o Gustavo vai enviar. Os e-mails públicos
   **não foram confirmados** por nós (a busca não achou fonte oficial): procurar no Lattes, na
   página do CIn/UFPE ou no botão de contato do IEEE DataPort. Registrar aqui a resposta.
@@ -496,13 +506,96 @@ Reordenadas em 12/11 pela decisão D10: **reconhecimento primeiro**; lições de
 | # | Etapa | Pronto quando |
 |---|---|---|
 | E0 | ✅ Estudo + baseline DTW (este documento) | feito em 12/11 |
-| E1 | **Aba Praticar**: topo de vidro fosco com o botão (hover azul), câmera + HolisticLandmarker no navegador, pontos desenhados, aviso de privacidade | **FPS medido** no notebook do Gustavo |
+| E1 | 🟡 **Aba Praticar**: topo de vidro fosco com o botão (hover azul), câmera + HolisticLandmarker no navegador, pontos desenhados, aviso de privacidade | **FPS medido** no notebook do Gustavo. Código pronto e medido em Chrome headless (seção 16.1); falta a medida no Chrome dele, com a webcam |
 | E2 | **Referências**: extrair o V-LIBRASIL inteiro (~2 h CPU) + EQT-UECE + MINDS; formato compacto por glosa | baseline DTW **medido nos 1.364 sinais** |
 | E3 | **Verificador**: SignCLIP primeiro; se não servir, o nosso codificador | **EER ≤ 10%** no protocolo da seção 7 |
 | E4 | **Bancada de reconhecimento**: o aluno escolhe um sinal, faz para a câmera e vê o veredito + o diagnóstico por parâmetro + o avatar fazendo o certo | o Gustavo testa ~30 sinais sem "errado" falso |
 | E5 | **Lições**: frase proposta, sinal a sinal (modo guiado), orientação do Jev | a estrutura das lições, a definir com o Gustavo |
 | E6 | **Frase corrida** (segmentação) | as frases da E5 sem o modo guiado |
 | E7 | Avatar como referência; classificador das configurações de mão | cobertura além dos 1.095 sinais |
+
+### 16.1 E1: o que foi feito e medido (13/11)
+
+**Código:**
+- `web/src/camera.ts`: hook `useCamera` com `getUserMedia` (1280×720 ideal, sem áudio) e
+  `HolisticLandmarker` em `runningMode: "VIDEO"` + `requestAnimationFrame`. Só processa
+  **quadro novo** (`video.currentTime` mudou). O modelo é criado **uma vez por página**: trocar de
+  aba não baixa nem recompila. Tenta o delegate **GPU** e cai para **CPU** se falhar; `?delegate=CPU`
+  na URL força a CPU, para comparar os dois.
+- `web/src/Praticar.tsx`: carregado sob demanda (`React.lazy`): quem só usa o chat não baixa o
+  MediaPipe (o pedaço JS tem 159 KB, ou 48 KB com gzip, mais o wasm e o modelo na 1ª vez).
+  Mostra o aviso de privacidade antes de pedir a câmera, o vídeo **espelhado** com os pontos
+  (tronco e braços da pose, as duas mãos; o rosto fica de fora do desenho por poluir), uma barra
+  com **quadros/s · ms por quadro · delegate**, a checagem de enquadramento (rosto · ombros ·
+  mãos) e o aviso fixo da seção 12.
+- `App.tsx`: abas **Conversar | Praticar** no topo, antes de "IA ligada". O **avatar é o mesmo
+  iframe** nas duas abas, só muda de lugar no grid (trocar de aba não recarrega o Unity). Sair da
+  aba Praticar **desliga a câmera** (o componente desmonta e para as trilhas).
+- `styles.css`: topo de vidro preto fosco nos dois temas (ele carrega os próprios tons do
+  escuro); hover azul das abas por token (`--azul`: claro no tema claro, escuro no escuro).
+
+**Medida (✅, 13/11):** Chrome 148 **headless** neste notebook, com câmera falsa alimentada por
+`Abacaxi_Articulador1.mp4` (ffmpeg + yadif → 1280×720 y4m, 30 fps). O WebGL do headless usa a
+**Intel UHD real** (`ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S))`), não emulação.
+
+| Delegate | quadros/s | ms por `detectForVideo` |
+|---|---|---|
+| CPU (WASM) | **13–14**, estável | ~72 |
+| GPU (WebGL na Intel UHD) | 8–15, oscilando | 63–142 |
+
+Leitura: **neste notebook a CPU ganha da GPU integrada**, e ~14 quadros/s fica perto dos 15 fps
+que o spike usou para comparar sinais. Dá para a E4, mas sem folga. Se o Chrome de verdade
+(com a webcam) der o mesmo, as saídas em ordem são: (1) deixar a CPU como padrão; (2) o plano B
+da seção 17 (Hand + Pose separados, sem a malha de 478 pontos do rosto, e o Face Landmarker só
+quando a ENM importar); (3) rodar a detecção num Web Worker para não travar a página.
+
+**Para o Gustavo medir:** `npm run dev`, abrir `http://localhost:5173`, aba **Praticar**, ligar a
+câmera, anotar os números da barra após ~10 s. Repetir em `http://localhost:5173/?delegate=CPU`.
+A câmera só funciona em **localhost ou https**: `HOST=0.0.0.0` em http, acessado de outro
+aparelho, não libera a câmera.
+
+### 16.2 A mão "some" no movimento (13/11)
+
+**Relato do Gustavo testando com a webcam:** em sinais com arrasto lateral (OI: mão em I
+arrastada; NOME: dois dedos de −x a +x) os pontos param de acompanhar a mão. E ele não sabia que
+a E1 ainda não reconhece nada (agora a tela diz isso).
+
+**Experimento ✅** (Chrome headless, CPU, câmera falsa = OI + NOME dos 3 articuladores do
+V-LIBRASIL, 54 s em laço; bancada descartável fora do repo, métrica = % dos quadros processados
+com ≥1 mão e quantos "buracos" sem mão):
+
+| Entrada | Config | quadros/s | ≥1 mão | 2 mãos | buracos |
+|---|---|---|---|---|---|
+| normal | A: Holistic padrão | 14,6 | 95,7% | 81,4% | 2 |
+| normal | B: Holistic, limiares baixos¹ | 14,5 | 95,9% | 86,9% | 2 |
+| normal | C: só Hand Landmarker | 23,8 | 96,4% | 47,6% | 2 |
+| 2× mais rápido | A | 14,6 | 96,4% | 82,7% | 6 |
+| 2× mais rápido | B | 14,4 | 97,1% | 86,3% | 3 |
+| 2× mais rápido | C | 23,6 | 95,1% | 42,4% | 5 |
+| 2× + **desfoque**² | A | 14,6 | **87,4%** | 70,3% | **25** |
+| 2× + desfoque | B | 14,4 | **92,3%** | 75,3% | 22, mais curtos |
+| 2× + desfoque | C | 23,2 | 88,9% | 35,0% | 23 |
+
+¹ `minHandLandmarksConfidence 0,2`, pose e rosto `0,3`. ² `tmix=frames=4` (média de 4 quadros,
+imita obturador lento).
+
+**Leitura:**
+- **Velocidade sozinha não derruba** o rastreio (2× = igual). **Desfoque derruba.**
+- Limiares baixos (B) recuperam parte (87 → 92%) e não pioram o vídeo limpo → **aplicado no app**.
+- Hand Landmarker separado é mais rápido (24 qps), mas perde a mão parada (2 mãos em 35–48%):
+  **descartado** como troca; o holístico acha a mão a partir da pose.
+- **A webcam do Gustavo** (`v4l2-ctl --list-ctrls`, sem ligar a câmera): `auto_exposure` em
+  *Aperture Priority* e **`exposure_dynamic_framerate=1`**, ou seja, em pouca luz ela **reduz o
+  FPS e alonga a exposição até 62,5 ms** (`exposure_time_absolute` 9–625, ×100 µs). É o
+  desfoque do experimento. Suspeito principal, **a confirmar com um clipe dele**.
+- Buracos curtos (1–7 quadros) na avaliação se resolvem por **interpolação** (já medido no
+  spike, seção 7). O problema é o buraco longo.
+
+**Próximo:** clipe de ~15 s da webcam dele (OI, NOME, mão parada) passado pela mesma bancada,
+com a luz de sempre e depois com mais luz ou `exposure_dynamic_framerate=0`. Se a exposição
+for a causa, as saídas em ordem são: luz (grátis), pedir exposição curta pelo navegador
+(`exposureMode/exposureTime` do MediaStreamTrack, a verificar se o Chrome no Linux aceita ⚠️),
+aviso de "pouca luz" na checagem de enquadramento.
 
 No começo, as frases e sinais propostos saem de uma lista cujos sinais **todos** têm referência
 (V-LIBRASIL ∩ avatar = 1.095).
@@ -524,8 +617,8 @@ No começo, as frases e sinais propostos saem de uma lista cujos sinais **todos*
 | SignCLIP sem pesos públicos ou sem Libras | cai para o nosso codificador (seção 9) |
 
 ### Perguntas abertas
-1. Escrever aos autores do V-LIBRASIL? (seção 15) — **posso redigir**.
-2. O espelho no HF: deixar público com citação, ou privado até a resposta?
+1. ~~Escrever aos autores do V-LIBRASIL?~~ Respondido em 13/11: autorizaram (seção 15).
+2. ~~O espelho no HF: público ou privado?~~ Público, **com citação no cartão do dataset**. Conferido em 13/11: o README do HF cita o portal da UFPE, mas **não os autores nem o DOI**: falta acrescentar (dissertação de Ailton J. Rodrigues, orientação de Cleber Zanchettin, CIn/UFPE 2021; DOI 10.21227/v589-hn68).
 3. Instalar o driver NVIDIA agora ou só se a CPU não der conta? (D11)
 4. Formato das lições (E5): a definir depois, por decisão do Gustavo (D10).
 
@@ -537,6 +630,8 @@ No começo, as frases e sinais propostos saem de uma lista cujos sinais **todos*
 |---|---|
 | 2026-11-12 | Criação: pedido, estudo, experimento DTW (EER 27%), arquitetura, decisões D1–D8 |
 | 2026-11-12 | Respostas do Gustavo: ordem diferente é aceita avisando (D9); reconhecimento antes das lições (D10, etapas reordenadas); GPU RTX 3050 6 GB em `nouveau`, treino começa na CPU (D11); seção legal escrita |
+| 2026-11-13 | Autores do V-LIBRASIL autorizaram por e-mail (espelho no HF + landmarks derivados), seção 15. E1 implementada: aba Praticar, câmera + Holistic no navegador, `@mediapipe/tasks-vision` fixado em **1.2.0**; FPS medido em headless: CPU 13–14 quadros/s (72 ms) > GPU Intel 8–15 (seção 16.1) |
+| 2026-11-13 | Mão "some" no arrasto (relato do Gustavo): velocidade não explica, desfoque sim (96 → 87%); limiares baixos aplicados (→ 92%); webcam dele alonga a exposição em pouca luz (§16.2). Tela agora diz que a E1 não reconhece sinais |
 
 ---
 
