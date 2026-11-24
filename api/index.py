@@ -3,4 +3,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ia"))
-from servidor import Handler as handler  # noqa: E402,F401
+from servidor import Handler  # noqa: E402
+
+
+# A Vercel só reconhece a função se `handler` for DEFINIDO aqui (classe/def/atribuição); import com `as` não conta.
+class handler(Handler):
+    pass
