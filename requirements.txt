@@ -1,1 +1,2 @@
--r ia/requirements.txt
+requests>=2.31
+simplemma>=1.1
